@@ -17,7 +17,15 @@
 curl -fsSL https://raw.githubusercontent.com/903xgs/parking-monitor/main/install.sh | sh
 ```
 
-首次执行会创建 `/opt/parking-monitor/config.env`。编辑它，填入已验证的 API URL、JWT、Bark Key、车辆和响应字段，然后再次执行安装命令。
+首次执行会创建 `/opt/parking-monitor/config.env`。编辑它，填入 JWT、Bark Key、停车场编号和车辆，然后再次执行安装命令。真实配置格式如下，但值只能保存在 iStoreOS：
+
+```env
+ACCESS_TOKEN=
+BARK_KEY=
+PARKING_ID=
+CARS=
+CHECK_INTERVAL=60
+```
 
 部署方式保持为：
 
@@ -59,6 +67,6 @@ docker exec parking-monitor python /app/monitor.py --check
 
 ## 配置
 
-仓库内的 `config.env.example` 不含真实值。`API_BODY_TEMPLATE` 用 `{plate}` 表示车牌；`PARKED_JSON_PATH` 指向接口响应中的停车状态字段。如果接口还需要 Referer 等请求头，可通过 `API_HEADERS_JSON` 配置。
+仓库内的 `config.env.example` 不含真实值。程序沿用当前已工作的 `queryTempFee` 接口、`PARKING_ID`、`CARS` 配置和连续两次确认离场逻辑。
 
-接口和响应格式属于停车服务商的实现细节。首次部署前，应使用当前已验证的请求补全本地配置，再运行 `--check`；不要把 HAR 上传到 GitHub。
+从原有 iStoreOS 部署迁移时，不需要删除 Docker 或 `/opt/parking-monitor`。直接运行更新命令即可；更新脚本保留 `config.env` 和 `data/`，验证失败会恢复旧程序。不要上传原始压缩包、HAR、`config.env`、`state.json` 或 `monitor.py.bak`。
