@@ -1,0 +1,86 @@
+#!/bin/sh
+set -eu
+
+APP_DIR=/opt/parking-monitor
+CONFIG="$APP_DIR/config.env"
+IMAGE=python:3.12-alpine
+CONTAINER=parking-monitor
+
+die() { printf '%s\n' "错误：$*" >&2; exit 1; }
+restart() {
+    docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+    docker run -d --name "$CONTAINER" --restart unless-stopped \
+      --env-file "$CONFIG" \
+      -v "$APP_DIR/monitor.py:/app/monitor.py:ro" \
+      -v "$APP_DIR/data:/app/data" \
+      -w /app "$IMAGE" python -u monitor.py >/dev/null
+}
+
+[ "$(id -u)" -eq 0 ] || die "请用 root 运行：parking-token"
+command -v docker >/dev/null 2>&1 || die "未找到 docker"
+[ -f "$CONFIG" ] || die "缺少 $CONFIG"
+[ -f "$APP_DIR/monitor.py" ] || die "缺少 $APP_DIR/monitor.py"
+
+printf '请粘贴新的 JWT（输入内容不会回显）：'
+stty -echo 2>/dev/null || true
+IFS= read -r NEW_TOKEN
+stty echo 2>/dev/null || true
+printf '\n'
+NEW_TOKEN=$(printf '%s' "$NEW_TOKEN" | tr -d '\r\n')
+[ -n "$NEW_TOKEN" ] || die "Token 为空"
+
+TOKEN_INFO=$(printf '%s' "$NEW_TOKEN" | docker run --rm -i "$IMAGE" python -c '
+import base64, json, re, sys, time
+from datetime import datetime, timezone, timedelta
+t=sys.stdin.read().strip()
+if not re.fullmatch(r"[A-Za-z0-9_-]+={0,2}\.[A-Za-z0-9_-]+={0,2}\.[A-Za-z0-9_-]+={0,2}", t):
+    raise SystemExit("JWT 基本格式不正确（应为三段 Base64URL）")
+p=t.split(".")[1]; p += "="*(-len(p)%4)
+try: data=json.loads(base64.urlsafe_b64decode(p))
+except Exception as e: raise SystemExit("JWT Payload 无法解析："+str(e))
+v=data.get("expires_in", data.get("exp"))
+if v is None: raise SystemExit("JWT Payload 中没有 expires_in 或 exp")
+try:
+    n=int(v); n=n/1000 if n>100000000000 else n
+    when=datetime.fromtimestamp(n, timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S Asia/Shanghai")
+    if n <= time.time(): raise SystemExit("JWT 已过期："+when)
+except ValueError: when=str(v)
+print("Token 格式：正常")
+print("Token 长度：", len(t), sep="")
+print("过期时间：", when, sep="")
+') || die "Token 校验失败"
+printf '%s\n' "$TOKEN_INFO"
+
+BACKUP="$CONFIG.bak.$(date +%Y%m%d%H%M%S)"
+cp "$CONFIG" "$BACKUP"
+if ! printf '%s' "$NEW_TOKEN" | docker run --rm -i -v "$APP_DIR:/work" "$IMAGE" python -c '
+import os, sys
+token=sys.stdin.read().strip()
+path="/work/config.env"; temp=path+".tmp"
+lines=[]
+with open(path, encoding="utf-8") as f:
+    for line in f:
+        if not line.startswith("ACCESS_TOKEN="): lines.append(line)
+lines.append("ACCESS_TOKEN="+token+"\n")
+with open(temp,"w",encoding="utf-8",newline="\n") as f: f.writelines(lines)
+os.chmod(temp,0o600); os.replace(temp,path)
+'; then
+    cp "$BACKUP" "$CONFIG"
+    die "写入 config.env 失败"
+fi
+unset NEW_TOKEN
+
+printf '%s\n' '正在重建容器并验证停车 API……'
+restart
+sleep 2
+if docker exec "$CONTAINER" python /app/monitor.py --check; then
+    rm -f "$BACKUP"
+    printf '%s\n' '成功：Token 已更新，停车 API 验证通过。'
+else
+    printf '%s\n' '验证失败：恢复原 config.env 和原容器。' >&2
+    cp "$BACKUP" "$CONFIG"
+    chmod 600 "$CONFIG"
+    rm -f "$BACKUP"
+    restart
+    die "新 Token 未启用；请查看 docker logs --tail 50 parking-monitor"
+fi
