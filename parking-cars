@@ -1,0 +1,80 @@
+#!/bin/sh
+set -eu
+
+APP_DIR=/opt/parking-monitor
+CONFIG="$APP_DIR/config.env"
+IMAGE=python:3.12-alpine
+CONTAINER=parking-monitor
+
+die() { printf '%s\n' "错误：$*" >&2; exit 1; }
+restart() {
+    docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+    docker run -d --name "$CONTAINER" --restart unless-stopped \
+      --env-file "$CONFIG" \
+      -v "$APP_DIR/monitor.py:/app/monitor.py:ro" \
+      -v "$APP_DIR/data:/app/data" \
+      -w /app "$IMAGE" python -u monitor.py >/dev/null
+}
+
+[ "$(id -u)" -eq 0 ] || die "请用 root 运行：parking-cars"
+command -v docker >/dev/null 2>&1 || die "未找到 docker"
+[ -f "$CONFIG" ] || die "缺少 $CONFIG"
+[ -f "$APP_DIR/monitor.py" ] || die "缺少 $APP_DIR/monitor.py"
+
+printf '请输入车牌，多个车牌用英文逗号分隔：'
+IFS= read -r RAW_CARS
+[ -n "$RAW_CARS" ] || die "车牌不能为空"
+
+NORMALIZED=$(printf '%s' "$RAW_CARS" | docker run --rm -i "$IMAGE" python -c '
+import re, sys
+raw=sys.stdin.read().strip().replace("，", ",")
+pattern=re.compile(r"^[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼][A-HJ-NP-Z][A-HJ-NP-Z0-9]{5,6}$", re.I)
+cars=[]
+for item in raw.split(","):
+    car="".join(item.split()).upper()
+    if not car: continue
+    if not pattern.fullmatch(car):
+        raise SystemExit("车牌格式不正确："+car)
+    if car not in cars: cars.append(car)
+if not cars: raise SystemExit("没有有效车牌")
+print(",".join(cars))
+') || die "车牌校验失败"
+unset RAW_CARS
+
+COUNT=$(printf '%s' "$NORMALIZED" | awk -F, '{print NF}')
+printf '已识别 %s 辆车：%s\n' "$COUNT" "$NORMALIZED"
+
+BACKUP="$CONFIG.bak.$(date +%Y%m%d%H%M%S)"
+cp "$CONFIG" "$BACKUP"
+if ! printf '%s' "$NORMALIZED" | docker run --rm -i -v "$APP_DIR:/work" "$IMAGE" python -c '
+import os, sys
+cars=sys.stdin.read().strip()
+path="/work/config.env"; temp=path+".tmp"
+lines=[]
+with open(path, encoding="utf-8") as f:
+    for line in f:
+        if not line.startswith("CARS="): lines.append(line)
+if lines and not lines[-1].endswith("\n"): lines[-1] += "\n"
+lines.append("CARS="+cars+"\n")
+with open(temp,"w",encoding="utf-8",newline="\n") as f: f.writelines(lines)
+os.chmod(temp,0o600); os.replace(temp,path)
+'; then
+    cp "$BACKUP" "$CONFIG"
+    die "写入 config.env 失败"
+fi
+unset NORMALIZED
+
+printf '%s\n' '正在重建容器并逐车验证停车 API……'
+restart
+sleep 2
+if docker exec "$CONTAINER" python /app/monitor.py --check; then
+    rm -f "$BACKUP"
+    printf '%s\n' '成功：车牌已更新，全部停车 API 验证通过。'
+else
+    printf '%s\n' '验证失败：恢复原车牌配置和原容器。' >&2
+    cp "$BACKUP" "$CONFIG"
+    chmod 600 "$CONFIG"
+    rm -f "$BACKUP"
+    restart
+    die "新车牌未启用；请查看 docker logs --tail 50 parking-monitor"
+fi

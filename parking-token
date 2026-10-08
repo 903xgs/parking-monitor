@@ -61,6 +61,7 @@ lines=[]
 with open(path, encoding="utf-8") as f:
     for line in f:
         if not line.startswith("ACCESS_TOKEN="): lines.append(line)
+if lines and not lines[-1].endswith("\n"): lines[-1] += "\n"
 lines.append("ACCESS_TOKEN="+token+"\n")
 with open(temp,"w",encoding="utf-8",newline="\n") as f: f.writelines(lines)
 os.chmod(temp,0o600); os.replace(temp,path)

@@ -18,13 +18,15 @@ fetch() {
 [ "$(id -u)" -eq 0 ] || die "请用 root 运行"
 command -v docker >/dev/null 2>&1 || die "未找到 docker；请先安装并启动 Docker"
 mkdir -p "$APP_DIR/data"
-for file in monitor.py install.sh update.sh parking-token config.env.example; do
+for file in monitor.py install.sh update.sh parking-token parking-cars config.env.example; do
     fetch "$RAW_BASE/$file" "$APP_DIR/$file"
 done
-chmod 755 "$APP_DIR/install.sh" "$APP_DIR/update.sh" "$APP_DIR/parking-token"
+chmod 755 "$APP_DIR/install.sh" "$APP_DIR/update.sh" "$APP_DIR/parking-token" "$APP_DIR/parking-cars"
 chmod 644 "$APP_DIR/monitor.py" "$APP_DIR/config.env.example"
 cp "$APP_DIR/parking-token" /usr/bin/parking-token
 chmod 755 /usr/bin/parking-token
+cp "$APP_DIR/parking-cars" /usr/bin/parking-cars
+chmod 755 /usr/bin/parking-cars
 
 if [ ! -f "$APP_DIR/config.env" ]; then
     cp "$APP_DIR/config.env.example" "$APP_DIR/config.env"

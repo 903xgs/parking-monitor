@@ -5,7 +5,7 @@ APP_DIR=/opt/parking-monitor
 RAW_BASE=https://raw.githubusercontent.com/903xgs/parking-monitor/main
 IMAGE=python:3.12-alpine
 CONTAINER=parking-monitor
-FILES="monitor.py install.sh update.sh parking-token config.env.example"
+FILES="monitor.py install.sh update.sh parking-token parking-cars config.env.example"
 
 die() { printf '%s\n' "错误：$*" >&2; exit 1; }
 fetch() {
@@ -33,6 +33,7 @@ for file in $FILES; do fetch "$RAW_BASE/$file" "$STAGE/$file"; done
 sh -n "$STAGE/install.sh"
 sh -n "$STAGE/update.sh"
 sh -n "$STAGE/parking-token"
+sh -n "$STAGE/parking-cars"
 docker run --rm -v "$STAGE/monitor.py:/tmp/monitor.py:ro" "$IMAGE" python -m py_compile /tmp/monitor.py
 
 mkdir -p "$APP_DIR/data" "$APP_DIR/backups"
@@ -41,11 +42,13 @@ for file in $FILES; do
     [ -f "$APP_DIR/$file" ] && cp "$APP_DIR/$file" "$APP_DIR/backups/$file.$STAMP"
     cp "$STAGE/$file" "$APP_DIR/$file"
 done
-chmod 755 "$APP_DIR/install.sh" "$APP_DIR/update.sh" "$APP_DIR/parking-token"
+chmod 755 "$APP_DIR/install.sh" "$APP_DIR/update.sh" "$APP_DIR/parking-token" "$APP_DIR/parking-cars"
 chmod 644 "$APP_DIR/monitor.py" "$APP_DIR/config.env.example"
 chmod 600 "$APP_DIR/config.env"
 cp "$APP_DIR/parking-token" /usr/bin/parking-token
 chmod 755 /usr/bin/parking-token
+cp "$APP_DIR/parking-cars" /usr/bin/parking-cars
+chmod 755 /usr/bin/parking-cars
 
 printf '%s\n' '脚本已更新；config.env 和 data/ 未改动。正在验证……'
 restart
@@ -59,6 +62,7 @@ else
         [ -f "$APP_DIR/backups/$file.$STAMP" ] && cp "$APP_DIR/backups/$file.$STAMP" "$APP_DIR/$file"
     done
     cp "$APP_DIR/parking-token" /usr/bin/parking-token 2>/dev/null || true
+    cp "$APP_DIR/parking-cars" /usr/bin/parking-cars 2>/dev/null || true
     restart
     die "更新未启用；旧版已恢复"
 fi
