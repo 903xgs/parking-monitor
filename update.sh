@@ -9,8 +9,9 @@ FILES="monitor.py install.sh update.sh parking-token config.env.example"
 
 die() { printf '%s\n' "错误：$*" >&2; exit 1; }
 fetch() {
-    if command -v curl >/dev/null 2>&1; then curl -fsSL "$1" -o "$2"
-    elif command -v wget >/dev/null 2>&1; then wget -qO "$2" "$1"
+    url="$1?v=$(date +%s)"
+    if command -v curl >/dev/null 2>&1; then curl -fsSL "$url" -o "$2"
+    elif command -v wget >/dev/null 2>&1; then wget -qO "$2" "$url"
     else die "需要 curl 或 wget"
     fi
 }
