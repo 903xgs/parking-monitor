@@ -51,6 +51,8 @@ Token 过期后运行：
 parking-token
 ```
 
+该命令安装在 iStoreOS/OpenWrt 默认 PATH 中的 `/usr/bin/parking-token`。
+
 该命令会隐藏输入，检查 JWT 三段格式，解析并显示 `expires_in` 或 `exp`，备份并更新 `config.env`，重建容器并调用停车 API 验证。验证失败时恢复原配置和容器。
 
 查看日志：

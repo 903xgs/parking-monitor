@@ -22,8 +22,8 @@ for file in monitor.py install.sh update.sh parking-token config.env.example; do
 done
 chmod 755 "$APP_DIR/install.sh" "$APP_DIR/update.sh" "$APP_DIR/parking-token"
 chmod 644 "$APP_DIR/monitor.py" "$APP_DIR/config.env.example"
-cp "$APP_DIR/parking-token" /usr/local/bin/parking-token
-chmod 755 /usr/local/bin/parking-token
+cp "$APP_DIR/parking-token" /usr/bin/parking-token
+chmod 755 /usr/bin/parking-token
 
 if [ ! -f "$APP_DIR/config.env" ]; then
     cp "$APP_DIR/config.env.example" "$APP_DIR/config.env"

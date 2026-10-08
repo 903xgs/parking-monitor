@@ -43,8 +43,8 @@ done
 chmod 755 "$APP_DIR/install.sh" "$APP_DIR/update.sh" "$APP_DIR/parking-token"
 chmod 644 "$APP_DIR/monitor.py" "$APP_DIR/config.env.example"
 chmod 600 "$APP_DIR/config.env"
-cp "$APP_DIR/parking-token" /usr/local/bin/parking-token
-chmod 755 /usr/local/bin/parking-token
+cp "$APP_DIR/parking-token" /usr/bin/parking-token
+chmod 755 /usr/bin/parking-token
 
 printf '%s\n' '脚本已更新；config.env 和 data/ 未改动。正在验证……'
 restart
@@ -57,7 +57,7 @@ else
     for file in $FILES; do
         [ -f "$APP_DIR/backups/$file.$STAMP" ] && cp "$APP_DIR/backups/$file.$STAMP" "$APP_DIR/$file"
     done
-    cp "$APP_DIR/parking-token" /usr/local/bin/parking-token 2>/dev/null || true
+    cp "$APP_DIR/parking-token" /usr/bin/parking-token 2>/dev/null || true
     restart
     die "更新未启用；旧版已恢复"
 fi
